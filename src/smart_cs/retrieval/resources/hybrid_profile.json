@@ -1,0 +1,7 @@
+{
+  "b": 0.75,
+  "candidate_k": 20,
+  "dense_weight": 0.5,
+  "k1": 1.5,
+  "rrf_k": 60
+}

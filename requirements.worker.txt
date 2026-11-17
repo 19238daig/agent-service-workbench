@@ -1,0 +1,16 @@
+# Only the document/vector/evaluation worker runtime; versions come from root lock.
+celery[redis]
+SQLAlchemy[asyncio]
+asyncpg
+python-dotenv
+pydantic
+httpx
+numpy
+pdfplumber
+pypdf
+beautifulsoup4
+lxml
+pgvector
+
+jieba
+rank-bm25

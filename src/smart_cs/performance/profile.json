@@ -1,0 +1,18 @@
+{
+  "cache_enabled": true,
+  "cache_max_entries": 256,
+  "cache_ttl_seconds": 120,
+  "call_seconds": 45.0,
+  "enabled": true,
+  "global_concurrency": 4,
+  "local_concurrency": 2,
+  "max_chat_attempts": 16,
+  "max_output_tokens": 3072,
+  "max_retries": 1,
+  "queue_seconds": 10.0,
+  "reported_token_budget": 50000,
+  "rewrite_on_demand": true,
+  "role_concurrency": 2,
+  "role_sources": {},
+  "round_seconds": 180.0
+}

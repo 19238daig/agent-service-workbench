@@ -1,0 +1,7 @@
+# Optional separate local GPU inference worker, already available on this machine.
+# Select a torch wheel appropriate for the machine's CUDA runtime.
+torch==2.7.1
+transformers==5.18.0
+fastapi==0.142.2
+uvicorn==0.54.0
+httpx==0.28.1

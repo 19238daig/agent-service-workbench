@@ -1,0 +1,121 @@
+name: smart-cs-delivery
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: smart_cs
+      POSTGRES_DB: smart_cs
+      POSTGRES_PASSWORD: ${DELIVERY_DB_PASSWORD:?Generate the private delivery environment first}
+    ports: ['127.0.0.1:${DELIVERY_DB_PORT:-65432}:5432']
+    volumes: ['postgres_data:/var/lib/postgresql']
+    healthcheck:
+      test: ['CMD-SHELL','pg_isready -U smart_cs -d smart_cs']
+      interval: 2s
+      timeout: 5s
+      retries: 25
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes: ['redis_data:/data']
+    healthcheck:
+      test: ['CMD','redis-cli','ping']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  job-redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
+    volumes: ['job_redis_data:/data']
+    healthcheck:
+      test: ['CMD','redis-cli','ping']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  app:
+    image: smart-cs-delivery:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: ['${DELIVERY_ENV_FILE:-.local/delivery/environment.env}']
+    environment: &app_environment
+      SMART_CS_PROJECT_ROOT: /app
+      DATABASE_URL: postgresql+asyncpg://smart_cs:${DELIVERY_DB_PASSWORD}@postgres:5432/${DELIVERY_DATABASE:-smart_cs}
+      JOB_DB_USER: smart_cs_jobs
+      JOB_DB_PASSWORD: ${DELIVERY_JOB_PASSWORD:?Generate the private delivery environment first}
+      REDIS_URL: redis://redis:6379/0
+      JOB_BROKER_URL: redis://job-redis:6379/0
+      RAG_ENABLED: ${DELIVERY_RAG_ENABLED:-false}
+      RAG_EMBEDDING_URL: ${CONTAINER_EMBEDDING_URL:-http://host.docker.internal:61535}
+      RAG_RERANKER_URL: ${CONTAINER_RERANKER_URL:-http://host.docker.internal:61536}
+      HOST: 0.0.0.0
+      PORT: '8000'
+      APP_MODE: local_demo
+      APP_ORIGINS: http://127.0.0.1:${DELIVERY_APP_PORT:-18000},http://localhost:${DELIVERY_APP_PORT:-18000}
+      DATABASE_AUTO_CREATE: 'false'
+      FOUNDATION_AUTO_START: 'false'
+      JOB_WORKER_AUTO_START: 'false'
+      RUN_EXECUTOR_ENABLED: ${DELIVERY_RUN_EXECUTOR_ENABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ''
+    ports: ['127.0.0.1:${DELIVERY_APP_PORT:-18000}:8000']
+    extra_hosts: ['host.docker.internal:host-gateway']
+    volumes: &app_volumes
+      - data:/app/data
+      - app_state:/app/.local
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    init: true
+    stop_grace_period: 30s
+    restart: unless-stopped
+  init:
+    image: smart-cs-delivery:local
+    profiles: ['tools']
+    command: ['python','-m','smart_cs.delivery','init']
+    environment: *app_environment
+    volumes: *app_volumes
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: 'no'
+  worker:
+    profiles: ['jobs']
+    image: smart-cs-delivery-worker:local
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment: &worker_environment
+      DATABASE_URL: postgresql+asyncpg://smart_cs_jobs:${DELIVERY_JOB_PASSWORD}@postgres:5432/${DELIVERY_DATABASE:-smart_cs}
+      SMART_CS_WORKER_CONTAINER: '1'
+      JOB_BROKER_URL: redis://job-redis:6379/0
+      RAG_EMBEDDING_URL: ${CONTAINER_EMBEDDING_URL:-http://host.docker.internal:61535}
+      RAG_RERANKER_URL: ${CONTAINER_RERANKER_URL:-http://host.docker.internal:61536}
+      RAG_EMBEDDING_MODEL: smart-cs-bge-m3
+    extra_hosts: ['host.docker.internal:host-gateway']
+    volumes: *app_volumes
+    depends_on:
+      postgres: {condition: service_healthy}
+      job-redis: {condition: service_healthy}
+    mem_limit: 2g
+    cpus: 2
+    init: true
+    stop_grace_period: 30s
+    restart: unless-stopped
+  dispatcher:
+    profiles: ['jobs']
+    image: smart-cs-delivery-worker:local
+    command: ['python','-m','smart_cs.background.dispatcher']
+    environment: *worker_environment
+    volumes: *app_volumes
+    depends_on:
+      postgres: {condition: service_healthy}
+      job-redis: {condition: service_healthy}
+    init: true
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  redis_data:
+  job_redis_data:
+  data:
+  app_state:

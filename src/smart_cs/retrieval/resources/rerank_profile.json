@@ -1,0 +1,9 @@
+{
+  "batch_size": 4,
+  "candidate_k": 20,
+  "context_k": 5,
+  "enabled": true,
+  "expected_identity": "b9bbf3bbff77db5a38b46635dbc5dac83ca8ad0f2be7c65f0347ebbc34dbfd7b",
+  "max_length": 256,
+  "min_score": 0.1
+}
