@@ -25,3 +25,151 @@
 
 @media(min-width:1101px){.desk-main>.topbar{padding-left:32px;padding-right:32px}}
 @media(min-width:801px) and (max-width:1100px){.desk-main>.topbar{padding-left:24px;padding-right:24px}}
+
+/* Ticket state carries the same meaning in the list, details and history. */
+.ticket-status {
+  --status-text: #364453;
+  --status-bg: #edf1f5;
+  --status-border: #d8e0e7;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--status-border);
+  border-radius: 6px;
+  background: var(--status-bg);
+  color: var(--status-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.ticket-status[data-status="created"] {
+  --status-text: #7b440a;
+  --status-bg: #fff2d7;
+  --status-border: #edcea0;
+}
+
+.ticket-status[data-status="processing"] {
+  --status-text: #224d83;
+  --status-bg: #eaf3ff;
+  --status-border: #c9dcf4;
+}
+
+.ticket-status[data-status="pending_review"] {
+  --status-text: #56407d;
+  --status-bg: #f2edfb;
+  --status-border: #ded1f2;
+}
+
+.ticket-status[data-status="escalated"] {
+  --status-text: #8d342c;
+  --status-bg: #fcece8;
+  --status-border: #efc9c0;
+}
+
+.ticket-status[data-status="resolved"] {
+  --status-text: #216144;
+  --status-bg: #e6f4eb;
+  --status-border: #c4e1ce;
+}
+
+.ticket-status[data-status="closed"] {
+  --status-text: #42515e;
+  --status-bg: #edf1f5;
+  --status-border: #d8e0e7;
+}
+
+.ticket-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 0 0 16px;
+}
+
+.ticket-toolbar > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ticket-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ticket-filters button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid #cbdcd1;
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ticket-filters button:hover {
+  background: #f0f6f2;
+  color: var(--green);
+}
+
+.ticket-filters button[aria-pressed="true"] {
+  border-color: #8bb29c;
+  background: #e4efe8;
+  color: #175840;
+  font-weight: 650;
+}
+
+.ticket-list > button {
+  gap: 6px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.ticket-detail .ticket-summary {
+  margin-top: 14px;
+  font-size: 19px;
+}
+
+.ticket-detail .desk-icon:disabled {
+  opacity: .5;
+}
+
+.ticket-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 0 8px;
+  margin-bottom: 8px;
+}
+
+.ticket-empty {
+  margin: 20px 0 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.ticket-list > button:focus-visible,
+.ticket-filters button:focus-visible,
+.ticket-back:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+@media (max-width: 800px) {
+  .ticket-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ticket-filters button {
+    padding-inline: 10px;
+  }
+}

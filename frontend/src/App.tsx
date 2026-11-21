@@ -445,7 +445,7 @@ export default function App({ user }: { user: User }) {
       </div>{workflowDocked && <aside className="workflow-docked"><WorkflowPanel profile={profile} trace={tracedReply?.trace} taskPlan={tracedReply?.taskPlan} action={tracedReply?.actionRequest} execution={tracedReply?.execution} historical={!!tracedReply && !tracedReply.trace} title={tracedQuestion} /></aside>}</div>
     </main>}
     {view !== 'chat' && <button className="product-mobile-menu" aria-label="打开会话列表" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>}
-    {view === 'tickets' && <TicketsDesk key={'tickets:' + focusedTicket + ':' + ticketViewVersion} initialTicket={focusedTicket} blocked={sidebarOpen && isMobile}
+    {view === 'tickets' && <TicketsDesk mobile={isMobile} key={'tickets:' + focusedTicket + ':' + ticketViewVersion} initialTicket={focusedTicket} blocked={sidebarOpen && isMobile}
       onDraft={startDraft} onContinue={continueAction}
       onSelfService={user.role === 'customer' ? ticket => {
         const issue = (ticket.summary + '。' + ticket.details).slice(0, 500);
@@ -457,7 +457,7 @@ export default function App({ user }: { user: User }) {
         if (selfService.issue === active.draft.trim() && !selfService.ticket) updateConversation(active.id, c => ({ ...c, draft: '' }));
         setFocusedTicket(ticket); setTicketViewVersion(v => v + 1); navigate('tickets'); setSelfService(undefined);
       }} />}
-    {view === 'support' && user.role !== 'customer' && <TicketsDesk key="support" support blocked={sidebarOpen && isMobile} onDraft={startDraft} onContinue={continueAction} />}
+    {view === 'support' && user.role !== 'customer' && <TicketsDesk mobile={isMobile} key="support" support blocked={sidebarOpen && isMobile} onDraft={startDraft} onContinue={continueAction} />}
     {view === 'knowledge' && user.role === 'admin' && <KnowledgeDesk user={user} blocked={sidebarOpen && isMobile} />}
     {view === 'performance' && user.role === 'admin' && <PerformanceDesk blocked={sidebarOpen && isMobile} />}
     {view === 'chat' && !workflowDocked && <dialog ref={workflowDialogRef} className="workflow-dialog" onCancel={e => { e.preventDefault(); setWorkflowOpen(false); }} aria-label="协作过程"><WorkflowPanel profile={profile} trace={tracedReply?.trace} taskPlan={tracedReply?.taskPlan} action={tracedReply?.actionRequest} execution={tracedReply?.execution} historical={!!tracedReply && !tracedReply.trace} title={tracedQuestion} onClose={() => setWorkflowOpen(false)} /></dialog>}

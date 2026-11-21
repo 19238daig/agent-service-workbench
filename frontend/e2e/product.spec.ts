@@ -43,13 +43,30 @@ test('confirmation requires checked consent and current hash; continue uses one 
 });
 
 test('ticket assignment binds its version and protected transition only prepares a chat draft', async ({ page }) => {
-  await setup(page);let assigned = false;let direct = false;
-  await page.route('**/api/tickets/TK-PRODUCT-21/assignment', route => { expect(route.request().postDataJSON()).toEqual({ assignee_id: 'staff-21', expected_version: 1, reason: '请处理此申请' });assigned = true;return route.fulfill({ json: { ticket } }); });
+  await setup(page);
+  let current = { ...ticket, assignee_id: 'staff-current' };
+  let direct = false;
+  await page.route('**/api/support/staff', route => route.fulfill({ json: { staff: [
+    { id: 'staff-current', display_name: '原处理客服' }, { id: 'staff-21', display_name: '处理客服' },
+  ] } }));
+  await page.route('**/api/tickets/TK-PRODUCT-21', route => route.fulfill({ json: { ticket: current } }));
+  await page.route('**/api/tickets/TK-PRODUCT-21/assignment', route => {
+    expect(route.request().postDataJSON()).toEqual({ assignee_id: 'staff-21', expected_version: 1, reason: '请处理此申请' });
+    current = { ...current, assignee_id: 'staff-21', version: 2 };
+    return route.fulfill({ json: { ticket: current } });
+  });
   await page.route('**/api/tickets/TK-PRODUCT-21/transitions', route => { direct = true;return route.fulfill({ status: 403 }); });
   await page.goto('/#/tickets');await page.getByRole('button', { name: /TK-PRODUCT-21/ }).click();const detail = page.getByRole('region', { name: '工单详情' });
-  await detail.getByLabel('分派给').selectOption('staff-21');await detail.getByLabel('分派说明').fill('请处理此申请');await detail.getByRole('button', { name: '确认分派' }).click();await expect.poll(() => assigned).toBe(true);
+  await expect(detail.getByLabel('分派给')).toHaveValue('staff-current');
+  await expect(detail.getByRole('definition').filter({ hasText: '原处理客服' })).toBeVisible();
+  await detail.getByLabel('分派给').selectOption('staff-21');
+  await detail.getByLabel('分派说明').fill('请处理此申请');
+  await expect(detail.getByLabel('处理原因')).toHaveValue('');
+  await detail.getByRole('button', { name: '确认分派' }).click();
+  await expect(detail.getByLabel('分派给')).toHaveValue('staff-21');
+  await expect(detail.getByLabel('分派说明')).toHaveValue('');
   await detail.getByLabel('目标状态').selectOption('closed');await detail.getByLabel('处理原因').fill('问题已解决');await detail.getByRole('button', { name: '生成处理草稿' }).click();
-  await expect(page.getByRole('textbox', { name: '输入消息' })).toHaveValue(/TK-PRODUCT-21.*closed.*问题已解决/);expect(direct).toBe(false);
+  await expect(page.getByRole('textbox', { name: '输入消息' })).toHaveValue(/TK-PRODUCT-21.*closed.*当前版本 2.*问题已解决/);expect(direct).toBe(false);
 });
 
 test('independent staff approval records a decision without executing an action', async ({ page }) => {
@@ -117,4 +134,76 @@ test('ticket and knowledge workbenches fit desktop tablet and mobile with usable
       await mkdir('../.local/product/visual', { recursive: true });await writeFile('../.local/product/visual/index.html', html, 'utf8');
     }
   }
+});
+
+test('ticket status badges distinguish states and filters clear the previous detail', async ({ page }) => {
+  await setup(page);
+  const closed = { ...ticket, ticket_id: 'TK-CLOSED', status: 'closed', can_assign: false, allowed_transitions: [] };
+  const resolved = { ...ticket, ticket_id: 'TK-RESOLVED', status: 'resolved', can_assign: false };
+  const allTickets = [ticket, resolved, closed];
+  let failNext = false;
+  await page.route('**/api/tickets?*', route => {
+    const status = new URL(route.request().url()).searchParams.get('status');
+    if (failNext) {
+      failNext = false;
+      return route.fulfill({ status: 503, json: { detail: '工单暂时无法读取。' } });
+    }
+    const rows = allTickets.filter(row => !status || row.status === status);
+    return route.fulfill({ json: { tickets: rows, total: rows.length, has_more: false } });
+  });
+  await page.route('**/api/tickets/TK-CLOSED', route => route.fulfill({ json: { ticket: closed } }));
+  await page.route('**/api/tickets/TK-CLOSED/events?*', route => route.fulfill({ json: {
+    events: [{ id: 'closed-event', to_status: 'closed', note: '工单已归档', created_at: closed.updated_at }], has_more: false,
+  } }));
+  await page.goto('/#/tickets');
+  const list = page.getByRole('region', { name: '我的工单列表' });
+  const badges = list.locator('.ticket-status');
+  await expect(badges).toHaveText(['待处理', '已解决', '已关闭']);
+  const styles = await badges.evaluateAll(elements => elements.map(element => ({
+    background: getComputedStyle(element).backgroundColor,
+    icon: element.querySelector('svg')?.innerHTML,
+  })));
+  expect(new Set(styles.map(style => style.background)).size).toBe(3);
+  expect(new Set(styles.map(style => style.icon)).size).toBe(3);
+  await list.getByRole('button', { name: /TK-PRODUCT-21/ }).click();
+  const detail = page.getByRole('region', { name: '工单详情' });
+  await expect(detail.locator('.ticket-status[data-status="created"]').first()).toBeVisible();
+
+  const filters = page.getByRole('group', { name: '筛选工单状态' });
+  await filters.getByRole('button', { name: '已关闭', exact: true }).click();
+  await expect(filters.getByRole('button', { name: '已关闭', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(badges).toHaveText(['已关闭']);
+  await expect(detail).toHaveCount(0);
+  await list.getByRole('button', { name: /TK-CLOSED/ }).click();
+  await expect(detail.locator('.ticket-status[data-status="closed"]')).toHaveCount(2);
+  await expect(detail.getByRole('button', { name: '确认分派' })).toHaveCount(0);
+
+  await filters.getByRole('button', { name: '待复核' }).click();
+  await expect(list.getByText('暂无「待复核」的工单。')).toBeVisible();
+  await list.getByRole('button', { name: '查看全部工单' }).click();
+  await expect(badges).toHaveCount(3);
+  failNext = true;
+  await page.getByRole('button', { name: '刷新列表' }).click();
+  await expect(list.getByRole('alert')).toContainText('工单暂时无法读取');
+  await expect(list.getByText('暂无工单。')).toHaveCount(0);
+  await list.getByRole('button', { name: '重试读取工单' }).click();
+  await expect(badges).toHaveCount(3);
+});
+
+test('mobile ticket details return to the same filtered item', async ({ page }) => {
+  await setup(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/tickets');
+  const filters = page.getByRole('group', { name: '筛选工单状态' });
+  await filters.getByRole('button', { name: '待处理', exact: true }).click();
+  const row = page.getByRole('button', { name: /TK-PRODUCT-21/ });
+  await row.focus();
+  await row.press('Enter');
+  const detail = page.getByRole('region', { name: '工单详情' });
+  await expect(detail.getByRole('heading', { name: '工单详情' })).toBeFocused();
+  await expect(row).toHaveCount(0);
+  await detail.getByRole('button', { name: '返回工单列表' }).click();
+  await expect(row).toBeFocused();
+  await expect(filters.getByRole('button', { name: '待处理', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
