@@ -314,6 +314,22 @@ class KnowledgeDocument(Base):
     )
 
 
+class SelfServiceCase(Base):
+    __tablename__ = 'self_service_cases'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    request: Mapped[dict] = mapped_column(JSON)
+    document_id: Mapped[str | None] = mapped_column(ForeignKey('knowledge_documents.id'), nullable=True)
+    document_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ticket_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decision: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    receipt: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint("decision IN ('resolved','handoff')", name='ck_self_service_decision'),
+    )
+
+
 class KnowledgeChunk(Base):
     __tablename__ = 'knowledge_chunks'
     id: Mapped[str] = mapped_column(String(100), primary_key=True)

@@ -37,9 +37,10 @@ class TicketUnitOfWork:
             user_id=owner.subject_id,order_id=body.order_id,type=body.type,priority=body.priority,
             summary=body.summary,details=body.details,requested_amount=requested_amount,status='created',version=1,source=source,created_at=now,updated_at=now)
         self.session.add(row);await self.session.flush()
+        registration_note = {'manual_api':'人工登记服务申请', 'self_service':'用户提交自助服务记录'}.get(source, '离线合成样例')
         self.session.add(TicketEvent(id=uuid4().hex,ticket_id=row.id,actor_id=owner.subject_id,actor_role=owner.role if owner.authenticated else None,
             action_id=action_id,event_type='created',from_status=None,to_status='created',ticket_version=1,source=source,
-            note='已确认动作登记申请' if action_id else '人工登记服务申请' if source=='manual_api' else '离线合成样例',created_at=now))
+            note='已确认动作登记申请' if action_id else registration_note,created_at=now))
         await self.session.flush()
         return row
 

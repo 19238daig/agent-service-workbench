@@ -4,7 +4,9 @@ import { post, useCommand, useResource } from './api';
 import { date, label, type ActionRequest, type Ticket, type TicketEvent } from './types';
 import ActionCard from './ActionCard';
 
-function TicketDetail({ id, onDraft, onChanged }: { id: string; onDraft: (text: string) => void; onChanged: () => void }) {
+function TicketDetail({ id, onDraft, onChanged, onSelfService }: {
+  id: string; onDraft: (text: string) => void; onChanged: () => void; onSelfService?: (ticket: Ticket) => void;
+}) {
   const detail = useResource<{ ticket: Ticket }>(`/api/tickets/${encodeURIComponent(id)}`);
   const [eventOffset, setEventOffset] = useState(0);const events = useResource<{ events: TicketEvent[]; has_more: boolean }>(`/api/tickets/${encodeURIComponent(id)}/events?limit=20&offset=${eventOffset}`);
   const staff = useResource<{ staff: { id: string; display_name: string }[] }>(detail.data?.ticket.can_assign ? '/api/support/staff' : null);
@@ -28,6 +30,8 @@ function TicketDetail({ id, onDraft, onChanged }: { id: string; onDraft: (text: 
     {ticket && <><div className="desk-line"><code>{ticket.ticket_id}</code><span className="desk-status">{label(ticket.status)}</span></div><h3>{ticket.summary}</h3><p className="desk-body">{ticket.details || '未补充描述'}</p>
       <dl className="desk-facts"><div><dt>类型 / 优先级</dt><dd>{label(ticket.type)} / {label(ticket.priority)}</dd></div><div><dt>订单号</dt><dd>{ticket.order_id || '—'}</dd></div>
         {ticket.requested_amount && <div><dt>申请金额</dt><dd>{ticket.requested_amount} 元</dd></div>}<div><dt>最近更新</dt><dd>{date(ticket.updated_at)}</dd></div><div><dt>当前版本</dt><dd>{ticket.version}</dd></div></dl>
+      {ticket.can_assign && onSelfService && ticket.status !== 'escalated' &&
+        <button type="button" className="desk-secondary" onClick={() => onSelfService(ticket)}>自助处理或转人工</button>}
       {ticket.can_assign && <form className="desk-form-section" onSubmit={e => { e.preventDefault();void assign(); }}><h3>选择处理客服</h3>
         <label className="desk-field">分派给<select value={assignee} onChange={e => setAssignee(e.target.value)} disabled={command.busy}><option value="">暂不分派 / 撤销分派</option>{staff.data?.staff.map(person => <option key={person.id} value={person.id}>{person.display_name}{ticket.assignee_id === person.id ? '（当前）' : ''}</option>)}</select></label>
         {staff.error && <p className="desk-error" role="alert">{staff.error}</p>}<label className="desk-field">分派说明<input required maxLength={500} value={reason} onChange={e => setReason(e.target.value)} disabled={command.busy} /></label>
@@ -46,7 +50,10 @@ function TicketDetail({ id, onDraft, onChanged }: { id: string; onDraft: (text: 
   </section>;
 }
 
-export default function TicketsDesk({ support = false, onDraft, onContinue, initialTicket, blocked }: { support?: boolean; initialTicket?: string; blocked?: boolean; onDraft: (text: string) => void; onContinue: (action: ActionRequest) => void }) {
+export default function TicketsDesk({ support = false, onDraft, onContinue, initialTicket, blocked, onSelfService }: {
+  support?: boolean; initialTicket?: string; blocked?: boolean; onDraft: (text: string) => void;
+  onContinue: (action: ActionRequest) => void; onSelfService?: (ticket: Ticket) => void;
+}) {
   const [tab, setTab] = useState('tickets');const [filter, setFilter] = useState('');const [offset, setOffset] = useState(0);const [selected, setSelected] = useState(initialTicket || '');const [actionId, setActionId] = useState('');
   const tickets = useResource<{ tickets: Ticket[]; total: number; has_more: boolean }>(`${support ? '/api/support/tickets' : '/api/tickets'}?limit=20&offset=${offset}${filter ? '&status=' + filter : ''}`);
   const approvals = useResource<{ items: ActionRequest[] }>(support ? `/api/staff/action-requests?limit=20&offset=${offset}` : '/api/action-requests?limit=20', 5000);
@@ -64,7 +71,7 @@ export default function TicketsDesk({ support = false, onDraft, onContinue, init
           <div className="desk-split"><section className="desk-card"><h2>{support ? '分派给我的工单' : '我的工单列表'}</h2>{tickets.error && <p className="desk-error" role="alert">{tickets.error}</p>}{tickets.loading && !tickets.data && <p role="status">正在读取…</p>}{!tickets.loading && !tickets.data?.tickets.length && <p className="desk-empty">暂无符合条件的工单。</p>}
             <div className="desk-list">{tickets.data?.tickets.map(ticket => <button key={ticket.ticket_id} className={selected === ticket.ticket_id ? 'selected' : ''} onClick={() => setSelected(ticket.ticket_id)}><div className="desk-line"><code>{ticket.ticket_id}</code><span className="desk-status">{label(ticket.status)}</span></div><strong>{ticket.summary}</strong><small>{label(ticket.type)} · {date(ticket.updated_at)}</small></button>)}</div>
             <div className="desk-pages"><button disabled={!offset} onClick={() => setOffset(n => Math.max(0, n - 20))}>上一页</button><button disabled={!tickets.data?.has_more} onClick={() => setOffset(n => n + 20)}>下一页</button></div></section>
-            {selected ? <TicketDetail key={selected} id={selected} onDraft={onDraft} onChanged={tickets.refresh} /> : <div className="desk-empty desk-card">选择一张工单查看状态和处理记录。</div>}
+            {selected ? <TicketDetail key={selected} id={selected} onDraft={onDraft} onChanged={tickets.refresh} onSelfService={onSelfService} /> : <div className="desk-empty desk-card">选择一张工单查看状态和处理记录。</div>}
           </div></>}
     </div></main>;
 }

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULES = [
     'test_models', 'test_dependencies', 'test_action_plans',
     'test_compliance_reviews', 'test_approvals', 'test_action_execution',
-    'test_compound_tasks', 'test_delivery',
+    'test_compound_tasks', 'test_delivery', 'test_self_service',
 ]
 
 

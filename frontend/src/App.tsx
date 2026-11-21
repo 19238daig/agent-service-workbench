@@ -4,6 +4,7 @@ import TaskCard from './product/TaskCard';
 import TicketsDesk from './product/TicketsDesk';
 import KnowledgeDesk from './product/KnowledgeDesk';
 import PerformanceDesk from './product/PerformanceDesk';
+import SelfServiceDialog, { serviceIssueFromChat, type ServiceIssue } from './product/SelfServiceDialog';
 import { useView } from './product/useView';
 import type { ActionRequest } from './product/types';
 import { apiFetch, logoutAccount, isCurrentAccount, type User } from './auth';
@@ -35,6 +36,8 @@ function PendingReply({ trace }: { trace?: Trace }) {
 export default function App({ user }: { user: User }) {
   const { view, navigate } = useView(user.role);
   const [focusedTicket, setFocusedTicket] = useState('');
+  const [ticketViewVersion, setTicketViewVersion] = useState(0);
+  const [selfService, setSelfService] = useState<ServiceIssue>();
   const [requestedResume, setRequestedResume] = useState<{ action: ActionRequest; key: string }>();
   const [workspace, setWorkspace] = useState(() => loadWorkspace(user.id));
   const [search, setSearch] = useState('');
@@ -347,6 +350,13 @@ export default function App({ user }: { user: User }) {
     }
   }
 
+  function submitMessage() {
+    if (isPending || connection !== 'online') return;
+    const issue = user.role === 'customer' && !active.actionRequest && !active.canResume ? serviceIssueFromChat(active.draft) : undefined;
+    if (issue) setSelfService(issue);
+    else void sendMessage();
+  }
+
   async function copyMessage(message: Message) {
     try { await navigator.clipboard.writeText(message.content); setCopiedId(message.id); }
     catch { setToast('未能复制，请选择回复文字后手动复制。'); }
@@ -373,6 +383,7 @@ export default function App({ user }: { user: User }) {
       <nav className="desk-nav" aria-label="工作区导航">
         <button aria-current={view === 'chat' ? 'page' : undefined} onClick={() => { navigate('chat');setSidebarOpen(false); }}><MessageSquare size={16} aria-hidden="true" />客服对话</button>
         <button aria-current={view === 'tickets' ? 'page' : undefined} onClick={() => { navigate('tickets');setSidebarOpen(false); }}><ClipboardCheck size={16} aria-hidden="true" />我的工单</button>
+        {user.role === 'customer' && <button onClick={() => { setSidebarOpen(false); setSelfService({}); }}><BookOpen size={16} aria-hidden="true" />售后自助处理</button>}
         {user.role !== 'customer' && <button aria-current={view === 'support' ? 'page' : undefined} onClick={() => { navigate('support');setSidebarOpen(false); }}><Headphones size={16} aria-hidden="true" />客服工作台</button>}
         {user.role === 'admin' && <button aria-current={view === 'knowledge' ? 'page' : undefined} onClick={() => { navigate('knowledge');setSidebarOpen(false); }}><BookOpen size={16} aria-hidden="true" />知识管理</button>}
         {user.role === 'admin' && <button aria-current={view === 'performance' ? 'page' : undefined} onClick={() => { navigate('performance');setSidebarOpen(false); }}><GitBranch size={16} aria-hidden="true" />运行观测</button>}
@@ -426,15 +437,26 @@ export default function App({ user }: { user: User }) {
       </div>
       {active.actionRequest?.action_id && !isPending && <div className="chat-action"><ActionCard key={active.actionRequest.action_id} actionId={active.actionRequest.action_id} onContinue={continueAction} /></div>}
       {active.canResume && !active.actionRequest?.action_id && !isPending && <div className="recovery-notice" role="status"><span>上轮处理尚未完成，可从已保存的进度继续。</span><button onClick={() => void sendMessage(undefined, true)} disabled={connection !== 'online'}><RefreshCw size={14} />恢复上轮处理</button><button onClick={createConversation}>新建对话</button></div>}
-      <div className="composer-area"><div className={`composer ${isPending ? 'composer-busy' : ''}`}><form onSubmit={e => { e.preventDefault(); void sendMessage(); }}>
+      <div className="composer-area"><div className={`composer ${isPending ? 'composer-busy' : ''}`}><form onSubmit={e => { e.preventDefault(); submitMessage(); }}>
         <label className="sr-only" htmlFor="message-input">输入消息</label>
-        <textarea id="message-input" ref={inputRef} rows={1} maxLength={8000} placeholder={isPending ? '可以先写下你的下一个问题…' : '输入你的问题，例如：我想了解退款政策…'} value={active.draft} onChange={e => updateConversation(active.id, c => ({ ...c, draft: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void sendMessage(); } }} aria-describedby="composer-hint" />
+        <textarea id="message-input" ref={inputRef} rows={1} maxLength={8000} placeholder={isPending ? '可以先写下你的下一个问题…' : '输入你的问题，例如：我想了解退款政策…'} value={active.draft} onChange={e => updateConversation(active.id, c => ({ ...c, draft: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); submitMessage(); } }} aria-describedby="composer-hint" />
         <div className="composer-toolbar"><span className="composer-caption"><MessageSquare size={14} aria-hidden="true" />{isPending ? '正在等待客服回复' : '描述得越具体，越容易解决'}</span><div className="composer-controls">{active.activeRunId && <button className="desk-text" type="button" onClick={() => { void apiFetch(`/api/runs/${encodeURIComponent(active.activeRunId!)}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => { if (!r.ok) throw new Error();setToast('已请求停止后续处理，已提交结果保留。'); }).catch(() => setToast('停止请求未确认，请刷新历史核实。')); }}>停止处理</button>}{active.draft.length > 7000 && <span className="character-count">{active.draft.length}/8000</span>}<button className="send-button" type="submit" disabled={!active.draft.trim() || isPending || connection !== 'online'} aria-label="发送消息" title="发送消息"><ArrowUp size={20} aria-hidden="true" /></button></div></div>
       </form></div><div className="composer-footer" id="composer-hint"><span>服务器保存已提交消息 · 内容由智能客服生成</span><span>Enter 发送<span className="keyboard-divider">/</span>Shift + Enter 换行</span></div></div>
       </div>{workflowDocked && <aside className="workflow-docked"><WorkflowPanel profile={profile} trace={tracedReply?.trace} taskPlan={tracedReply?.taskPlan} action={tracedReply?.actionRequest} execution={tracedReply?.execution} historical={!!tracedReply && !tracedReply.trace} title={tracedQuestion} /></aside>}</div>
     </main>}
     {view !== 'chat' && <button className="product-mobile-menu" aria-label="打开会话列表" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>}
-    {view === 'tickets' && <TicketsDesk initialTicket={focusedTicket} blocked={sidebarOpen && isMobile} onDraft={startDraft} onContinue={continueAction} />}
+    {view === 'tickets' && <TicketsDesk key={'tickets:' + focusedTicket + ':' + ticketViewVersion} initialTicket={focusedTicket} blocked={sidebarOpen && isMobile}
+      onDraft={startDraft} onContinue={continueAction}
+      onSelfService={user.role === 'customer' ? ticket => {
+        const issue = (ticket.summary + '。' + ticket.details).slice(0, 500);
+        const options = ticket.type === 'general' ? serviceIssueFromChat('找' + issue) : undefined;
+        setSelfService({ ...options, kind: options?.kind || (ticket.type === 'complaint' && /破损|损坏/.test(issue) ? 'damage' : 'other'), issue, ticket, autoLookup: false });
+      } : undefined} />}
+    {selfService && <SelfServiceDialog userId={user.id} initial={selfService} onClose={() => setSelfService(undefined)}
+      onTicket={ticket => {
+        if (selfService.issue === active.draft.trim() && !selfService.ticket) updateConversation(active.id, c => ({ ...c, draft: '' }));
+        setFocusedTicket(ticket); setTicketViewVersion(v => v + 1); navigate('tickets'); setSelfService(undefined);
+      }} />}
     {view === 'support' && user.role !== 'customer' && <TicketsDesk key="support" support blocked={sidebarOpen && isMobile} onDraft={startDraft} onContinue={continueAction} />}
     {view === 'knowledge' && user.role === 'admin' && <KnowledgeDesk user={user} blocked={sidebarOpen && isMobile} />}
     {view === 'performance' && user.role === 'admin' && <PerformanceDesk blocked={sidebarOpen && isMobile} />}

@@ -16,6 +16,7 @@ from smart_cs.api.auth import router as auth_router,allowed_origins
 from smart_cs.api.jobs import router as jobs_router
 from smart_cs.api.runs import router as runs_router
 from smart_cs.api.knowledge_admin import router as knowledge_admin_router
+from smart_cs.api.self_service import router as self_service_router
 from smart_cs.services.access import document_visibility, can_read_document
 from smart_cs.services.orders import OrderService
 from smart_cs.repositories.orders import OrderRepository
@@ -172,6 +173,7 @@ app.include_router(auth_router)
 app.include_router(jobs_router)
 app.include_router(runs_router)
 app.include_router(knowledge_admin_router)
+app.include_router(self_service_router)
 
 
 def require_graph():
